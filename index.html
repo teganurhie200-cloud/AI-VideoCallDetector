@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Advanced Video Call</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        body {
+            font-family: Arial;
+            text-align: center;
+            margin: 0;
+            padding: 10px;
+            background: #111;
+            color: white;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .videos {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        video {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 10px;
+            background: black;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        input {
+            padding: 10px;
+            width: 90%;
+            max-width: 300px;
+        }
+
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            background: green;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: darkgreen;
+        }
+
+        @media (min-width: 768px) {
+            video {
+                width: 45%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<h3>My ID: <span id="my-id"></span></h3>
+
+<div class="container">
+
+    <div class="controls">
+        <input type="text" id="friend-id" placeholder="Friend ID">
+        <button onclick="callFriend()">📞 Call</button>
+    </div>
+
+    <div class="controls">
+        <button onclick="toggleMute()">🔇 Mute</button>
+        <button onclick="toggleVideo()">🎥 Camera Off</button>
+        <button onclick="switchCamera()">🔄 Switch Camera</button>
+    </div>
+
+    <div style="position: relative; display: inline-block;">
+    <video id="my-video" autoplay muted width="300" style="border-radius:10px;"></video>
+    <canvas id="overlay" style="position: absolute; top: 0; left: 0;"></canvas>
+</div>
+</div>
+
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+<script>
+let peer = new Peer();
+let myStream;
+let currentStream;
+let videoTrack;
+let audioTrack;
+let usingFrontCamera = true;
+
+// Start camera
+async function startCamera() {
+    const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: usingFrontCamera ? "user" : "environment" },
+        audio: true
+    });
+
+    currentStream = stream;
+    myStream = stream;
+
+    videoTrack = stream.getVideoTracks()[0];
+    audioTrack = stream.getAudioTracks()[0];
+
+    document.getElementById('my-video').srcObject = stream;
+}
+
+startCamera();
+startCamera().then(() => {
+    startFaceDetection();
+});
+
+async function startFaceDetection() {
+    await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js/weights');
+
+    const video = document.getElementById('my-video');
+    const canvas = document.getElementById('overlay');
+    const displaySize = { width: video.width, height: video.height };
+    faceapi.matchDimensions(canvas, displaySize);
+
+    video.addEventListener('play', () => {
+        setInterval(async () => {
+            const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+            canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+            const resizedDetections = faceapi.resizeResults(detections, displaySize);
+            faceapi.draw.drawDetections(canvas, resizedDetections);
+        }, 100); // every 100ms
+    });
+}
+
+// Show ID
+peer.on('open', id => {
+    document.getElementById('my-id').innerText = id;
+});
+
+// Answer call
+peer.on('call', call => {
+    call.answer(myStream);
+
+    call.on('stream', friendStream => {
+        document.getElementById('friend-video').srcObject = friendStream;
+    });
+});
+
+// Call friend
+function callFriend() {
+    const friendId = document.getElementById('friend-id').value;
+    const call = peer.call(friendId, myStream);
+
+    call.on('stream', friendStream => {
+        document.getElementById('friend-video').srcObject = friendStream;
+    });
+}
+
+// Mute / Unmute
+function toggleMute() {
+    audioTrack.enabled = !audioTrack.enabled;
+    alert(audioTrack.enabled ? "Unmuted" : "Muted");
+}
+
+// Camera On / Off
+function toggleVideo() {
+    videoTrack.enabled = !videoTrack.enabled;
+    alert(videoTrack.enabled ? "Camera On" : "Camera Off");
+}
+
+// Switch Camera
+async function switchCamera() {
+    usingFrontCamera = !usingFrontCamera;
+
+    const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: usingFrontCamera ? "user" : "environment" },
+        audio: true
+    });
+
+    document.getElementById('my-video').srcObject = newStream;
+
+    // Replace tracks
+    const sender = peer.connections[Object.keys(peer.connections)[0]][0].peerConnection.getSenders();
+
+    sender.forEach(s => {
+        if (s.track.kind === "video") {
+            s.replaceTrack(newStream.getVideoTracks()[0]);
+        }
+        if (s.track.kind === "audio") {
+            s.replaceTrack(newStream.getAudioTracks()[0]);
+        }
+    });
+
+    myStream = newStream;
+}
+</script>
+
+</body>
+</html>
