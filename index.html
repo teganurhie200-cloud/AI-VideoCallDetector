@@ -104,14 +104,16 @@
     <div class="videos">
         <div class="video-wrapper">
             <h3>My Video</h3>
-            <video id="my-video" autoplay muted></video>
+            <video id="my-video" autoplay playsinline></video>
             <canvas id="overlay"></canvas>
         </div>
         <div class="video-wrapper">
             <h3>Friend Video</h3>
-            <video id="friend-video" autoplay></video>
+            <video id="friend-video" autoplay playsinline></video>
         </div>
     </div>
+
+    
 </div>
 
 <!-- Libraries -->
@@ -143,6 +145,13 @@ async function startCamera() {
 
     startFaceDetection();
 }
+
+// Prevent mobile tap from pausing video
+const videos = document.querySelectorAll('video');
+videos.forEach(v => {
+    v.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+    v.addEventListener('click', e => e.preventDefault());
+});
 
 // Initialize
 startCamera();
