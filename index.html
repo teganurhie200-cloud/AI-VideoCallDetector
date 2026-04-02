@@ -1,38 +1,30 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Advanced Video Call</title>
-
+    <meta charset="UTF-8">
+    <title>Advanced Video Call with Face Detection</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+    <!-- Styles -->
     <style>
         body {
-            font-family: Arial;
-            text-align: center;
+            font-family: Arial, sans-serif;
             margin: 0;
             padding: 10px;
             background: #111;
             color: white;
+            text-align: center;
+        }
+
+        h3 {
+            margin: 5px 0;
         }
 
         .container {
             display: flex;
             flex-direction: column;
             gap: 15px;
-        }
-
-        .videos {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            justify-content: center;
-        }
-
-        video {
-            width: 100%;
-            max-width: 400px;
-            border-radius: 10px;
-            background: black;
+            align-items: center;
         }
 
         .controls {
@@ -45,11 +37,13 @@
         input {
             padding: 10px;
             width: 90%;
-            max-width: 300px;
+            max-width: 250px;
+            font-size: 16px;
         }
 
         button {
             padding: 10px 15px;
+            font-size: 16px;
             border: none;
             border-radius: 8px;
             background: green;
@@ -61,23 +55,44 @@
             background: darkgreen;
         }
 
+        .videos {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .video-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        video {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 10px;
+            background: black;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
         @media (min-width: 768px) {
-            video {
-                width: 45%;
-            }
+            video { width: 45%; }
         }
     </style>
 </head>
-
 <body>
 
-<h3>My ID: <span id="my-id"></span></h3>
+<h3>My ID: <span id="my-id">...</span></h3>
 
 <div class="container">
-
     <div class="controls">
-        <input type="text" id="friend-id" placeholder="Friend ID">
-        <button onclick="callFriend()">📞 Call</button>
+        <input type="text" id="friend-id" placeholder="Enter friend's ID">
+        <button id="call-btn" onclick="callFriend()" disabled>📞 Call</button>
     </div>
 
     <div class="controls">
@@ -86,21 +101,27 @@
         <button onclick="switchCamera()">🔄 Switch Camera</button>
     </div>
 
-    <div style="position: relative; display: inline-block;">
-    <video id="my-video" autoplay muted width="300" style="border-radius:10px;"></video>
-    <canvas id="overlay" style="position: absolute; top: 0; left: 0;"></canvas>
-</div>
+    <div class="videos">
+        <div class="video-wrapper">
+            <h3>My Video</h3>
+            <video id="my-video" autoplay muted></video>
+            <canvas id="overlay"></canvas>
+        </div>
+        <div class="video-wrapper">
+            <h3>Friend Video</h3>
+            <video id="friend-video" autoplay></video>
+        </div>
+    </div>
 </div>
 
-<script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+<!-- Libraries -->
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
 
 <script>
 let peer = new Peer();
-let myStream;
-let currentStream;
-let videoTrack;
-let audioTrack;
+let myStream, currentStream;
+let videoTrack, audioTrack;
 let usingFrontCamera = true;
 
 // Start camera
@@ -117,68 +138,55 @@ async function startCamera() {
     audioTrack = stream.getAudioTracks()[0];
 
     document.getElementById('my-video').srcObject = stream;
-}
 
-startCamera();
-startCamera().then(() => {
+    document.getElementById('call-btn').disabled = false;
+
     startFaceDetection();
-});
-
-async function startFaceDetection() {
-    await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js/weights');
-
-    const video = document.getElementById('my-video');
-    const canvas = document.getElementById('overlay');
-    const displaySize = { width: video.width, height: video.height };
-    faceapi.matchDimensions(canvas, displaySize);
-
-    video.addEventListener('play', () => {
-        setInterval(async () => {
-            const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
-            canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-            const resizedDetections = faceapi.resizeResults(detections, displaySize);
-            faceapi.draw.drawDetections(canvas, resizedDetections);
-        }, 100); // every 100ms
-    });
 }
 
-// Show ID
+// Initialize
+startCamera();
+
+// Show my Peer ID
 peer.on('open', id => {
     document.getElementById('my-id').innerText = id;
 });
 
-// Answer call
+// Answer incoming call
 peer.on('call', call => {
     call.answer(myStream);
-
     call.on('stream', friendStream => {
         document.getElementById('friend-video').srcObject = friendStream;
     });
 });
 
-// Call friend
+// Call a friend
 function callFriend() {
-    const friendId = document.getElementById('friend-id').value;
+    const friendId = document.getElementById('friend-id').value.trim();
+    if (!friendId) return alert("Enter friend's ID");
+
     const call = peer.call(friendId, myStream);
 
     call.on('stream', friendStream => {
         document.getElementById('friend-video').srcObject = friendStream;
     });
+
+    call.on('error', err => console.log(err));
 }
 
-// Mute / Unmute
+// Mute / unmute
 function toggleMute() {
     audioTrack.enabled = !audioTrack.enabled;
     alert(audioTrack.enabled ? "Unmuted" : "Muted");
 }
 
-// Camera On / Off
+// Camera on/off
 function toggleVideo() {
     videoTrack.enabled = !videoTrack.enabled;
     alert(videoTrack.enabled ? "Camera On" : "Camera Off");
 }
 
-// Switch Camera
+// Switch camera
 async function switchCamera() {
     usingFrontCamera = !usingFrontCamera;
 
@@ -189,21 +197,42 @@ async function switchCamera() {
 
     document.getElementById('my-video').srcObject = newStream;
 
-    // Replace tracks
-    const sender = peer.connections[Object.keys(peer.connections)[0]][0].peerConnection.getSenders();
+    videoTrack = newStream.getVideoTracks()[0];
+    audioTrack = newStream.getAudioTracks()[0];
 
-    sender.forEach(s => {
-        if (s.track.kind === "video") {
-            s.replaceTrack(newStream.getVideoTracks()[0]);
-        }
-        if (s.track.kind === "audio") {
-            s.replaceTrack(newStream.getAudioTracks()[0]);
-        }
+    // Replace tracks in ongoing calls
+    const connections = peer.connections;
+    Object.values(connections).forEach(arr => {
+        arr.forEach(conn => {
+            const sender = conn.peerConnection.getSenders();
+            sender.forEach(s => {
+                if (s.track.kind === "video") s.replaceTrack(videoTrack);
+                if (s.track.kind === "audio") s.replaceTrack(audioTrack);
+            });
+        });
     });
 
     myStream = newStream;
 }
-</script>
 
+// Face Detection
+async function startFaceDetection() {
+    await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js/weights');
+    const video = document.getElementById('my-video');
+    const canvas = document.getElementById('overlay');
+    const displaySize = { width: video.width, height: video.height };
+    faceapi.matchDimensions(canvas, displaySize);
+
+    video.addEventListener('play', () => {
+        setInterval(async () => {
+            const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const resized = faceapi.resizeResults(detections, displaySize);
+            faceapi.draw.drawDetections(canvas, resized);
+        }, 100);
+    });
+}
+</script>
 </body>
 </html>
